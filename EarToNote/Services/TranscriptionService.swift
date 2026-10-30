@@ -58,7 +58,7 @@ struct TranscriptionService {
             try await analyzer.finalizeAndFinish(through: lastSample)
         } else {
             // The file contained no audio samples.
-            try? await analyzer.cancelAndFinishNow()
+            await analyzer.cancelAndFinishNow()
         }
 
         let words = try await collected
