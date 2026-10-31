@@ -8,8 +8,10 @@ hatırlar. **Ses, metin ve ses imzaları yalnızca cihazda saklanır; hiçbir ş
 
 - **Tek dokunuşla kayıt:** Ekran kilitliyken de devam eder. Duraklatıp devam ettirebilirsiniz; telefon
   araması gibi kesintilerden sonra kayıt otomatik olarak sürer.
-- **Cihaz üzerinde yazıya dökme:** Apple'ın `SpeechAnalyzer` / `SpeechTranscriber` altyapısı (iOS 26)
-  kullanılır. Varsayılan dil Türkçe; Ayarlar'dan İngilizce, Almanca veya Fransızca seçilebilir.
+- **Cihaz üzerinde yazıya dökme:** Apple'ın `SpeechAnalyzer` altyapısı (iOS 26) kullanılır. Varsayılan
+  dil Türkçe; Ayarlar'dan İngilizce, Almanca veya Fransızca seçilebilir. `SpeechTranscriber` Türkçe'yi
+  desteklemediği için Türkçe kayıtlar aynı altyapının `DictationTranscriber` modülüyle, yine cihaz üzerinde
+  yazıya dökülür.
 - **Konuşmacı ayrıştırma:** [FluidAudio](https://github.com/FluidInference/FluidAudio) ile (pyannote
   community-1 segmentasyonu, WeSpeaker ses imzaları ve VBx kümeleme, Core ML üzerinde) "kim ne zaman
   konuştu" bulunur.
@@ -45,7 +47,7 @@ aynı kişi her toplantıda yeni bir konuşmacı olarak geliyorsa azaltın.
 ## Gereksinimler
 
 - Xcode 26 veya üzeri yüklü bir Mac.
-- iOS 26 / iPadOS 26 çalışan, cihaz üzerinde konuşma tanımayı (`SpeechTranscriber`) destekleyen bir
+- iOS 26 / iPadOS 26 çalışan, cihaz üzerinde konuşma tanımayı (`SpeechAnalyzer`) destekleyen bir
   iPhone veya iPad. Seçilen dil desteklenmiyorsa Ayarlar'da "Bu dil desteklenmiyor" yazar.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (Xcode projesi `project.yml` dosyasından üretilir).
 

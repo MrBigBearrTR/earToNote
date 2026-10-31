@@ -27,8 +27,9 @@ final class BackgroundProcessingCoordinator {
         guard jobs[jobID] == nil else { return }
         jobs[jobID] = Job(title: title, task: nil, subtitle: subtitle, onExpiration: onExpiration)
 
-        // Each job uses a unique identifier because registering the same identifier twice terminates the app.
-        let identifier = "\(identifierPrefix).\(jobID.uuidString)"
+        // Every attempt needs a fresh identifier: registering the same identifier twice terminates the app,
+        // and a meeting can be processed more than once (retry, reprocess).
+        let identifier = "\(identifierPrefix).\(UUID().uuidString)"
         let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) { [weak self] task in
             MainActor.assumeIsolated {
                 self?.attach(task, to: jobID)
