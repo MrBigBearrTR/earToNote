@@ -27,6 +27,9 @@ struct RootView: View {
         }
         .task {
             processor.recoverInterruptedMeetings(in: modelContext)
+            if ScreenshotLaunch.screen == "detail" {
+                selection = meetings.max(by: { $0.duration < $1.duration })?.id
+            }
         }
     }
 }

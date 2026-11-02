@@ -82,6 +82,13 @@ struct MeetingListView: View {
                 SettingsView()
             }
         }
+        .task {
+            switch ScreenshotLaunch.screen {
+            case "settings": showingSettings = true
+            case "speakers": showingSpeakers = true
+            default: break
+            }
+        }
         .alert("Mikrofon izni gerekli", isPresented: $showingPermissionAlert) {
             Button("Ayarları Aç") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {

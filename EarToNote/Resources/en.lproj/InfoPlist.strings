@@ -1,1 +1,3 @@
 "CFBundleDisplayName" = "Ears To Note";
+"NSMicrophoneUsageDescription" = "Microphone access is needed to record meetings. Recordings are stored only on this device.";
+"NSSpeechRecognitionUsageDescription" = "Recordings are transcribed on this device; audio is never sent to a server.";
