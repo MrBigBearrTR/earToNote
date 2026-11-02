@@ -20,7 +20,7 @@ final class BackgroundProcessingCoordinator {
     private var jobs: [UUID: Job] = [:]
 
     private var identifierPrefix: String {
-        "\(Bundle.main.bundleIdentifier ?? "com.eartonote.app").process"
+        "\(Bundle.main.bundleIdentifier ?? "com.bigbear.earstonote").process"
     }
 
     func begin(jobID: UUID, title: String, subtitle: String, onExpiration: @escaping () -> Void) {

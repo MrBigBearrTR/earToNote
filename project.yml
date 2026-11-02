@@ -1,7 +1,7 @@
 name: EarToNote
 
 options:
-  bundleIdPrefix: com.eartonote
+  bundleIdPrefix: com.bigbear
   deploymentTarget:
     iOS: "26.0"
   developmentLanguage: tr
@@ -38,8 +38,9 @@ targets:
     info:
       path: EarToNote/Info.plist
       properties:
-        CFBundleDisplayName: EarToNote
+        CFBundleDisplayName: Ears To Note
         CFBundleDevelopmentRegion: tr
+        LSApplicationCategoryType: public.app-category.productivity
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIApplicationSceneManifest:
@@ -63,7 +64,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.aliyalcin.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.bigbear.earstonote
         DEVELOPMENT_TEAM: KC2J97VT29
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

@@ -65,7 +65,7 @@ open EarToNote.xcodeproj
 
 1. Xcode'da **EarToNote** hedefini seçin, **Signing & Capabilities** sekmesinde kendi **Team**'inizi
    seçin. Ücretsiz Apple hesabı da yeterlidir.
-2. `com.eartonote.app` paket kimliği kullanılamıyorsa `project.yml` içindeki `PRODUCT_BUNDLE_IDENTIFIER`
+2. `com.bigbear.earstonote` paket kimliği kullanılamıyorsa `project.yml` içindeki `PRODUCT_BUNDLE_IDENTIFIER`
    değerini değiştirip `xcodegen generate` komutunu tekrar çalıştırın.
 3. Cihazınızı bağlayıp **Run** ile yükleyin. İlk açılışta mikrofon izni istenir.
 
