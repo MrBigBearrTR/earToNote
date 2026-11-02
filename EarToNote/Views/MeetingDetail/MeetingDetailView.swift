@@ -57,7 +57,10 @@ struct MeetingDetailView: View {
                     isProcessing: processor.isProcessing(meeting.id),
                     onCopy: copy(_:message:),
                     onRename: beginTitleEdit,
-                    onReprocess: { processor.process(meeting, in: modelContext) },
+                    onReprocess: { speakerCount in
+                        meeting.expectedSpeakerCount = speakerCount
+                        processor.process(meeting, in: modelContext)
+                    },
                     onDelete: { confirmingDelete = true }
                 )
             }
@@ -89,7 +92,9 @@ struct MeetingDetailView: View {
             player.load(url: meeting.audioURL)
         }
         .onDisappear {
-            player.stop()
+            // iOS can report a disappearance for a detail view that stays on screen (iPhone split view),
+            // so only pause here; the player is released together with the view.
+            player.pause()
         }
     }
 
@@ -154,10 +159,14 @@ struct MeetingDetailView: View {
         case .failed:
             FailedStatusView(
                 message: meeting.errorMessage ?? "Bilinmeyen bir hata oluştu.",
-                canRetry: RecordingStore.fileExists(named: meeting.audioFileName)
-            ) {
-                processor.process(meeting, in: modelContext)
-            }
+                canRetry: RecordingStore.fileExists(named: meeting.audioFileName),
+                onRetry: { processor.process(meeting, in: modelContext) },
+                onShowPrevious: meeting.segments.isEmpty ? nil : {
+                    meeting.status = .ready
+                    meeting.errorMessage = nil
+                    try? modelContext.save()
+                }
+            )
         case .ready:
             TranscriptListView(meeting: meeting, player: player) { participant in
                 editingParticipant = participant
@@ -200,7 +209,8 @@ private struct MeetingActionsMenu: View {
     let isProcessing: Bool
     let onCopy: (String, String) -> Void
     let onRename: () -> Void
-    let onReprocess: () -> Void
+    /// The number of people in the meeting, or `nil` to let it be detected.
+    let onReprocess: (Int?) -> Void
     let onDelete: () -> Void
 
     var body: some View {
@@ -238,7 +248,13 @@ private struct MeetingActionsMenu: View {
 
             if RecordingStore.fileExists(named: meeting.audioFileName) {
                 Section("Ses") {
-                    ShareLink(item: meeting.audioURL, preview: SharePreview("\(meeting.title).m4a")) {
+                    ShareLink(
+                        item: RecordingFile(
+                            sourceURL: meeting.audioURL,
+                            fileName: "\(TranscriptExport.fileBaseName(for: meeting)).m4a"
+                        ),
+                        preview: SharePreview(meeting.title)
+                    ) {
                         Label("Ses Kaydını Paylaş", systemImage: "waveform")
                     }
                 }
@@ -248,16 +264,39 @@ private struct MeetingActionsMenu: View {
                 Button(action: onRename) {
                     Label("Yeniden Adlandır", systemImage: "pencil")
                 }
-                Button(action: onReprocess) {
-                    Label("Yeniden İşle", systemImage: "arrow.clockwise")
-                }
-                .disabled(isProcessing || meeting.status == .recording)
+                reprocessMenu
+                    .disabled(isProcessing || meeting.status == .recording)
                 Button(role: .destructive, action: onDelete) {
                     Label("Toplantıyı Sil", systemImage: "trash")
                 }
             }
         } label: {
             Label("Diğer", systemImage: "ellipsis.circle")
+        }
+    }
+
+    private var reprocessMenu: some View {
+        Menu {
+            Button {
+                onReprocess(nil)
+            } label: {
+                Label("Kişi Sayısını Otomatik Bul", systemImage: meeting.expectedSpeakerCount == nil ? "checkmark" : "wand.and.stars")
+            }
+            Section("Toplantıda kaç kişi vardı?") {
+                ForEach(1...8, id: \.self) { count in
+                    Button {
+                        onReprocess(count)
+                    } label: {
+                        if meeting.expectedSpeakerCount == count {
+                            Label("\(count) kişi", systemImage: "checkmark")
+                        } else {
+                            Text("\(count) kişi")
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label("Yeniden İşle", systemImage: "arrow.clockwise")
         }
     }
 }

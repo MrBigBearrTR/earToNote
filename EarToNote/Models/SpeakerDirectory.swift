@@ -93,12 +93,14 @@ enum SpeakerDirectory {
         try? context.save()
     }
 
-    /// Removes the transcript of a meeting (before re-processing it) without leaving stale voice data behind.
-    static func clearTranscript(of meeting: Meeting, in context: ModelContext) {
+    /// Removes the transcript of a meeting without leaving stale voice data behind.
+    /// - Parameter keeping: Profiles that must survive even if nothing refers to them any more, because
+    ///   the new transcript may reuse them; call `deleteUnusedProfiles(withIDs:in:)` afterwards.
+    static func clearTranscript(of meeting: Meeting, in context: ModelContext, keeping: Set<UUID> = []) {
         for participant in Array(meeting.participants) {
             let previous = participant.speaker
             detach(participant)
-            if let previous {
+            if let previous, !keeping.contains(previous.id) {
                 deleteIfUnused(previous, ignoring: participant, in: context)
             }
             context.delete(participant)
@@ -108,10 +110,16 @@ enum SpeakerDirectory {
         }
     }
 
+    static func deleteUnusedProfiles(withIDs ids: Set<UUID>, in context: ModelContext) {
+        for profile in allProfiles(in: context) where ids.contains(profile.id) {
+            deleteIfUnused(profile, ignoring: nil, in: context)
+        }
+    }
+
     /// Auto-created profiles that no longer have any voice or meeting are noise from a wrong match.
-    private static func deleteIfUnused(_ profile: SpeakerProfile, ignoring participant: MeetingParticipant, in context: ModelContext) {
+    private static func deleteIfUnused(_ profile: SpeakerProfile, ignoring participant: MeetingParticipant?, in context: ModelContext) {
         guard !profile.isNamedByUser, !profile.hasVoiceprint else { return }
-        let others = profile.participants.filter { $0.id != participant.id }
+        let others = profile.participants.filter { $0.id != participant?.id && !$0.isDeleted }
         guard others.isEmpty else { return }
         context.delete(profile)
     }

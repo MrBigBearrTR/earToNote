@@ -13,7 +13,8 @@ public struct SpeakerCandidate: Equatable, Sendable {
     }
 }
 
-/// A person saved on the device with a voiceprint from earlier meetings.
+/// A person saved on the device with a voiceprint from earlier meetings. The same person may be listed
+/// more than once, e.g. with their voiceprint and with their voice from a previous run of this meeting.
 public struct KnownSpeaker: Equatable, Sendable {
     public var id: UUID
     public var embedding: [Float]
@@ -73,12 +74,13 @@ public struct SpeakerMatcher: Sendable {
         }
 
         var result: [String: SpeakerMatch] = [:]
-        var usedKnown = Set<Int>()
+        var usedProfiles = Set<UUID>()
         for pair in pairs where pair.similarity >= threshold {
             let key = candidates[pair.candidateIndex].key
-            guard result[key] == nil, !usedKnown.contains(pair.knownIndex) else { continue }
-            usedKnown.insert(pair.knownIndex)
-            result[key] = SpeakerMatch(candidateKey: key, profileID: known[pair.knownIndex].id, similarity: pair.similarity)
+            let profileID = known[pair.knownIndex].id
+            guard result[key] == nil, !usedProfiles.contains(profileID) else { continue }
+            usedProfiles.insert(profileID)
+            result[key] = SpeakerMatch(candidateKey: key, profileID: profileID, similarity: pair.similarity)
         }
 
         for candidate in candidates where result[candidate.key] == nil {

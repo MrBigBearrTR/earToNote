@@ -44,11 +44,30 @@ struct TranscriptFile: Transferable {
 
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(exportedContentType: .plainText) { file in
-            let directory = URL.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let url = directory.appending(path: file.fileName, directoryHint: .notDirectory)
+            let url = try sharedFileURL(named: file.fileName)
             try file.contents.write(to: url, atomically: true, encoding: .utf8)
             return SentTransferredFile(url)
         }
     }
+}
+
+/// The recording handed to the share sheet under the meeting's title rather than its internal file name.
+struct RecordingFile: Transferable {
+    let sourceURL: URL
+    let fileName: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .mpeg4Audio) { file in
+            let url = try sharedFileURL(named: file.fileName)
+            try FileManager.default.copyItem(at: file.sourceURL, to: url)
+            return SentTransferredFile(url)
+        }
+    }
+}
+
+/// A fresh location per share, so files with the same name never collide.
+private func sharedFileURL(named fileName: String) throws -> URL {
+    let directory = URL.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory.appending(path: fileName, directoryHint: .notDirectory)
 }

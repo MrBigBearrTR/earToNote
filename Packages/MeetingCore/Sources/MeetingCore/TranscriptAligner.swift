@@ -40,13 +40,27 @@ public struct TranscriptAligner: Sendable {
     }
 
     public func align(words: [TimedWord], turns: [SpeakerTurn]) -> [AlignedSegment] {
-        let orderedWords = words.enumerated()
-            .sorted { lhs, rhs in
-                lhs.element.start == rhs.element.start ? lhs.offset < rhs.offset : lhs.element.start < rhs.element.start
-            }
-            .map(\.element)
-        let keys = assignSpeakers(words: orderedWords, turns: turns)
+        let orderedWords = Self.ordered(words.map { ($0, nil as String?) }).map(\.word)
+        return paragraphs(words: orderedWords, keys: assignSpeakers(words: orderedWords, turns: turns))
+    }
 
+    /// Builds paragraphs from words whose speaker is already known, e.g. because every turn was
+    /// transcribed on its own (see `TurnLayout`). `speakerKeys` has one entry per word.
+    public func align(words: [TimedWord], speakerKeys: [String?]) -> [AlignedSegment] {
+        precondition(words.count == speakerKeys.count, "One speaker key per word")
+        let ordered = Self.ordered(Array(zip(words, speakerKeys)))
+        return paragraphs(words: ordered.map(\.word), keys: ordered.map(\.key))
+    }
+
+    private static func ordered(_ pairs: [(TimedWord, String?)]) -> [(word: TimedWord, key: String?)] {
+        pairs.enumerated()
+            .sorted { lhs, rhs in
+                lhs.element.0.start == rhs.element.0.start ? lhs.offset < rhs.offset : lhs.element.0.start < rhs.element.0.start
+            }
+            .map { (word: $0.element.0, key: $0.element.1) }
+    }
+
+    private func paragraphs(words orderedWords: [TimedWord], keys: [String?]) -> [AlignedSegment] {
         var segments: [AlignedSegment] = []
         var currentTokens: [String] = []
         var currentKey: String?

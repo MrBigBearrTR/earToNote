@@ -80,10 +80,20 @@ private enum Transcriber: Sendable {
     }
 }
 
+struct TranscriptionOutput: Sendable {
+    /// Recognized words with their position in the recording.
+    var words: [TimedWord]
+    /// The speaker of every word when the speaker turns were transcribed one by one; `nil` when the
+    /// recording was transcribed as a whole.
+    var speakerKeys: [String]?
+}
+
 /// Transcribes recordings fully on device with Apple's SpeechAnalyzer (iOS 26).
 /// The language model is a system asset: it is downloaded once and shared with other apps, so it
 /// does not increase the app's size.
 struct TranscriptionService {
+    /// Sample rate of the audio prepared from speaker turns; the rate speech models work at.
+    private static let turnSampleRate = 16_000.0
     func modelStatus(localeIdentifier: String) async -> SpeechModelStatus {
         guard let resolved = await Transcriber.resolve(localeIdentifier: localeIdentifier) else {
             return .unsupported
@@ -99,16 +109,48 @@ struct TranscriptionService {
         try await ensureAssets(for: transcriber, progress: progress)
     }
 
-    /// Returns the recognized words with their position in the recording. `progress` receives values in 0...1.
+    /// Transcribes the speaker turns found by diarization, or the whole recording when there are none.
+    /// `progress` receives values in 0...1.
+    ///
+    /// Speech recognition follows the dominant voice of a recording and drops much of what quieter or
+    /// more distant people say. Hearing every turn on its own, brought to a common loudness, recovers
+    /// their words, and each word is attributed to the turn it was spoken in.
     func transcribe(
         fileURL: URL,
         localeIdentifier: String,
         duration: TimeInterval,
+        turns: [SpeakerTurn],
         progress: @escaping @Sendable (Double) -> Void
-    ) async throws -> [TimedWord] {
+    ) async throws -> TranscriptionOutput {
         let transcriber = try await makeTranscriber(localeIdentifier: localeIdentifier)
         try await ensureAssets(for: transcriber)
 
+        let layout = TurnLayout(turns: turns, recordingDuration: duration, sampleRate: Self.turnSampleRate)
+        guard !layout.isEmpty else {
+            let words = try await recognize(fileURL, with: transcriber, duration: duration, progress: progress)
+            return TranscriptionOutput(words: words, speakerKeys: nil)
+        }
+
+        let turnsURL = FileManager.default.temporaryDirectory.appending(path: "turns-\(UUID().uuidString).caf")
+        defer { try? FileManager.default.removeItem(at: turnsURL) }
+        // Preparing the audio takes a few seconds per hour of recording.
+        let preparedShare = 0.03
+        try TurnAudioWriter.write(layout, from: fileURL, to: turnsURL) { value in
+            progress(value * preparedShare)
+        }
+        let words = try await recognize(turnsURL, with: transcriber, duration: layout.outputDuration) { value in
+            progress(preparedShare + value * (1 - preparedShare))
+        }
+        let placed = layout.place(words)
+        return TranscriptionOutput(words: placed.words, speakerKeys: placed.speakerKeys)
+    }
+
+    private func recognize(
+        _ fileURL: URL,
+        with transcriber: Transcriber,
+        duration: TimeInterval,
+        progress: @escaping @Sendable (Double) -> Void
+    ) async throws -> [TimedWord] {
         let analyzer = SpeechAnalyzer(modules: [transcriber.module])
         async let collected = collectWords(from: transcriber, duration: duration, progress: progress)
 

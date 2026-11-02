@@ -18,13 +18,15 @@ enum ProcessingError: LocalizedError {
 
 enum ProcessingStage: Equatable {
     case preparing
-    case analyzing
+    case separatingSpeakers
+    case transcribing
     case identifyingSpeakers
 
     var title: String {
         switch self {
         case .preparing: "Hazırlanıyor"
-        case .analyzing: "Yazıya dökülüyor ve konuşmacılar ayrıştırılıyor"
+        case .separatingSpeakers: "Konuşmacılar ayrıştırılıyor"
+        case .transcribing: "Yazıya dökülüyor"
         case .identifyingSpeakers: "Konuşmacılar tanınıyor"
         }
     }
@@ -38,15 +40,15 @@ struct ProcessingProgress: Equatable {
     var fraction: Double {
         switch stage {
         case .preparing: 0.02
-        case .analyzing: 0.05 + 0.85 * (min(transcription, 1) + min(diarization, 1)) / 2
-        case .identifyingSpeakers: 0.95
+        case .separatingSpeakers: 0.05 + 0.3 * min(diarization, 1)
+        case .transcribing: 0.35 + 0.6 * min(transcription, 1)
+        case .identifyingSpeakers: 0.97
         }
     }
 }
 
-/// Turns a finished recording into a speaker-attributed transcript:
-/// transcription and diarization run in parallel, words are aligned to speaker turns, and every
-/// voice is matched against the people saved on the device.
+/// Turns a finished recording into a speaker-attributed transcript: diarization finds who spoke when,
+/// every speaker turn is transcribed, and every voice is matched against the people saved on the device.
 @MainActor
 @Observable
 final class MeetingProcessor {
@@ -64,12 +66,12 @@ final class MeetingProcessor {
         tasks[meetingID] != nil
     }
 
-    /// Starts (or restarts) processing. Any previous transcript of the meeting is replaced.
+    /// Starts (or restarts) processing. A previous transcript of the meeting is replaced once the new one
+    /// is ready; until then, and if processing is cancelled, it is kept.
     func process(_ meeting: Meeting, in context: ModelContext) {
         let meetingID = meeting.id
         guard tasks[meetingID] == nil else { return }
 
-        SpeakerDirectory.clearTranscript(of: meeting, in: context)
         meeting.status = .processing
         meeting.errorMessage = nil
         try? context.save()
@@ -99,6 +101,9 @@ final class MeetingProcessor {
             case .recording:
                 meeting.status = .failed
                 meeting.errorMessage = "Kayıt beklenmedik şekilde sonlandı. Kaydedilebilen kısmı işlemeyi deneyebilirsiniz."
+            case .processing where !meeting.segments.isEmpty:
+                // Re-processing was interrupted; the previous transcript is still intact.
+                meeting.status = .ready
             case .processing:
                 meeting.status = .failed
                 meeting.errorMessage = "İşlem yarıda kaldı. Tekrar deneyebilirsiniz."
@@ -120,45 +125,79 @@ final class MeetingProcessor {
                 meeting.duration = Self.fileDuration(of: audioURL)
             }
             let duration = meeting.duration
-
-            setStage(.analyzing, for: meetingID)
+            let speakerCount = meeting.expectedSpeakerCount
             let transcriptionService = self.transcriptionService
-            async let wordsResult = transcriptionService.transcribe(
+
+            setStage(.separatingSpeakers, for: meetingID)
+            // The language model is downloaded on first use; that can happen while speakers are separated.
+            async let languageModel: Void = transcriptionService.installModel(localeIdentifier: localeIdentifier)
+            let diarization = try await DiarizationService.shared.diarize(
+                fileURL: audioURL,
+                speakerCount: speakerCount
+            ) { [weak self] value in
+                Task { @MainActor in
+                    self?.report(diarization: value, for: meetingID)
+                }
+            }
+            try await languageModel
+            try Task.checkCancellation()
+
+            setStage(.transcribing, for: meetingID)
+            let transcription = try await transcriptionService.transcribe(
                 fileURL: audioURL,
                 localeIdentifier: localeIdentifier,
-                duration: duration
+                duration: duration,
+                turns: diarization.turns
             ) { [weak self] value in
                 Task { @MainActor in
                     self?.report(transcription: value, for: meetingID)
                 }
             }
-            async let diarizationResult = DiarizationService.shared.diarize(fileURL: audioURL) { [weak self] value in
-                Task { @MainActor in
-                    self?.report(diarization: value, for: meetingID)
-                }
-            }
-            let (words, diarization) = try await (wordsResult, diarizationResult)
             try Task.checkCancellation()
 
             guard let current = fetchMeeting(meetingID, in: context) else { throw CancellationError() }
             setStage(.identifyingSpeakers, for: meetingID)
-            buildTranscript(for: current, words: words, diarization: diarization, in: context)
+            buildTranscript(for: current, transcription: transcription, diarization: diarization, in: context)
             current.status = .ready
             current.errorMessage = nil
             try context.save()
             succeeded = true
         } catch {
             if let meeting = fetchMeeting(meetingID, in: context) {
-                meeting.status = .failed
-                meeting.errorMessage = error is CancellationError ? "İşlem iptal edildi." : error.localizedDescription
+                if error is CancellationError, !meeting.segments.isEmpty {
+                    meeting.status = .ready
+                    meeting.errorMessage = nil
+                } else {
+                    meeting.status = .failed
+                    meeting.errorMessage = error is CancellationError ? "İşlem iptal edildi." : error.localizedDescription
+                }
                 try? context.save()
             }
         }
         finish(meetingID, success: succeeded)
     }
 
-    private func buildTranscript(for meeting: Meeting, words: [TimedWord], diarization: DiarizationOutput, in context: ModelContext) {
-        let alignedSegments = aligner.align(words: words, turns: diarization.turns)
+    private func buildTranscript(
+        for meeting: Meeting,
+        transcription: TranscriptionOutput,
+        diarization: DiarizationOutput,
+        in context: ModelContext
+    ) {
+        // Voices from the previous transcript of this meeting, so that re-processing keeps the people
+        // they were assigned to, including names that were only given in this meeting.
+        let previousVoices = meeting.participants.compactMap { participant -> KnownSpeaker? in
+            guard let profile = participant.speaker, let embedding = participant.embedding, !embedding.isEmpty else { return nil }
+            return KnownSpeaker(id: profile.id, embedding: embedding)
+        }
+        let previousProfileIDs = Set(previousVoices.map(\.id))
+        SpeakerDirectory.clearTranscript(of: meeting, in: context, keeping: previousProfileIDs)
+        defer { SpeakerDirectory.deleteUnusedProfiles(withIDs: previousProfileIDs, in: context) }
+
+        let alignedSegments = if let speakerKeys = transcription.speakerKeys {
+            aligner.align(words: transcription.words, speakerKeys: speakerKeys)
+        } else {
+            aligner.align(words: transcription.words, turns: diarization.turns)
+        }
         let speechDurations = SpeakerStats.speechDurations(of: diarization.turns)
 
         // Only voices that actually said something become participants; diarization also reports
@@ -181,7 +220,7 @@ final class MeetingProcessor {
         let known = profiles.compactMap { profile -> KnownSpeaker? in
             guard profile.hasVoiceprint, let vector = profile.voiceprint.vector else { return nil }
             return KnownSpeaker(id: profile.id, embedding: vector)
-        }
+        } + previousVoices
         let matches = SpeakerMatcher(threshold: Float(AppSettings.matchThreshold)).match(candidates: candidates, known: known)
         let profilesByID = Dictionary(profiles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var nextNumber = SpeakerNaming.nextNumber(existing: profiles.map(\.number))

@@ -18,6 +18,8 @@ final class Meeting {
     var statusRaw: String
     var errorMessage: String?
     var localeIdentifier: String
+    /// Number of people the user said took part; `nil` lets diarization decide.
+    var expectedSpeakerCount: Int? = nil
 
     @Relationship(deleteRule: .cascade, inverse: \TranscriptSegment.meeting)
     var segments: [TranscriptSegment] = []

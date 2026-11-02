@@ -29,8 +29,10 @@ hatırlar. **Ses, metin ve ses imzaları yalnızca cihazda saklanır; hiçbir ş
 
 ## Konuşmacılar nasıl hatırlanıyor?
 
-1. Kayıt bitince yazıya dökme ve konuşmacı ayrıştırma aynı anda çalışır. Kelimeler zaman damgalarına göre
-   konuşmacılara dağıtılır.
+1. Kayıt bitince önce konuşmacılar ayrıştırılır ("kim ne zaman konuştu"). Ardından her konuşma bölümü
+   ayrı ayrı ve ortak bir ses seviyesine getirilerek yazıya dökülür. Konuşma tanıma bir kayıttaki baskın
+   sese odaklandığı için telefona uzak oturan, kısık sesli kişilerin sözleri aksi halde büyük ölçüde
+   kaybolur. Her kelime söylendiği bölümün konuşmacısına yazılır.
 2. Her konuşmacı için 256 boyutlu bir **ses imzası** (embedding) hesaplanır.
 3. Bu imzalar cihazda kayıtlı kişilerin imzalarıyla kosinüs benzerliğiyle karşılaştırılır. Eşleşme bire
    birdir: bir toplantıda iki ses aynı kişiye atanamaz.
@@ -88,10 +90,17 @@ daha uzun sürer.
 4. Sağ üstteki kopyala düğmesiyle tüm metni kopyalayın ya da **Diğer** (…) menüsünden paylaşın.
 5. Kayıtlı tüm kişileri ana ekrandaki **Kişiler** düğmesinden yönetebilirsiniz (isim değiştirme,
    birleştirme, silme).
+6. Bir kişi ikiye bölündüyse ya da iki kişi birleştiyse **Diğer** (…) → **Yeniden İşle** menüsünden
+   toplantıdaki kişi sayısını seçerek kaydı yeniden işleyin. Yeniden işlerken önceki metin, yenisi hazır
+   olana kadar korunur ve verdiğiniz isimler yeni metne taşınır.
 
 ## Sınırlamalar
 
 - Aynı anda konuşulan bölümlerde konuşmacı ayrımı ve metin doğruluğu düşer.
+- Telefondan uzak ve kısık sesle konuşan kişilerin sözleri, ses seviyelendirmeye rağmen eksik ya da
+  hatalı yazılabilir. Mümkünse telefonu masanın ortasına koyun.
+- Konuşmacı sayısı otomatik bulunurken az konuşan biri iki ayrı kişi gibi görünebilir; bu durumda
+  **Yeniden İşle** menüsünden kişi sayısını seçin.
 - Toplam 3 saniyeden kısa konuşan kişilerin ses imzası güvenilir olmadığı için kaydedilmez; bu kişiler
   sonraki toplantılarda otomatik tanınmayabilir.
 - Sesi çok benzeyen kişiler veya çok farklı ortamlarda (hoparlör, telefon, gürültülü salon) yapılan
@@ -112,8 +121,9 @@ EarToNote/
   Views/                         SwiftUI ekranları
   Resources/                     Asset katalogu ve gizlilik bildirimi
 Packages/MeetingCore/            Platformdan bağımsız mantık ve birim testleri:
-                                 kelime-konuşmacı hizalama, ses imzası eşleştirme,
-                                 metin birleştirme, dışa aktarma biçimleri
+                                 kelime-konuşmacı hizalama, konuşma bölümlerinin yazıya
+                                 dökme için düzenlenmesi ve seviyelendirilmesi, ses imzası
+                                 eşleştirme, metin birleştirme, dışa aktarma biçimleri
 .github/workflows/ios-build.yml  CI: Linux ve macOS'ta testler, iOS Simulator derlemesi
 ```
 

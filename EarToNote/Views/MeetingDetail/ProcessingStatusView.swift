@@ -35,6 +35,8 @@ struct FailedStatusView: View {
     let message: String
     let canRetry: Bool
     let onRetry: () -> Void
+    /// Set when an earlier transcript survived the failed attempt.
+    var onShowPrevious: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -46,11 +48,17 @@ struct FailedStatusView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            if canRetry {
-                Button(action: onRetry) {
-                    Label("Tekrar Dene", systemImage: "arrow.clockwise")
+            HStack(spacing: 12) {
+                if canRetry {
+                    Button(action: onRetry) {
+                        Label("Tekrar Dene", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
+                if let onShowPrevious {
+                    Button("Önceki Metni Göster", action: onShowPrevious)
+                        .buttonStyle(.bordered)
+                }
             }
         }
         .padding()

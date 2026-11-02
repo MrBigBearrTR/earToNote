@@ -117,6 +117,21 @@ final class TranscriptAlignerTests: XCTestCase {
         XCTAssertEqual(segments.map(\.text), ["Merhaba dünya"])
     }
 
+    func testKnownSpeakerKeysAreUsedAsGiven() {
+        let words = [
+            TimedWord(text: "iki", start: 1.0, end: 1.2),
+            TimedWord(text: "Bir", start: 0.0, end: 0.4),
+            TimedWord(text: "evet", start: 1.3, end: 1.5),
+        ]
+
+        let segments = aligner.align(words: words, speakerKeys: ["S1", "S1", "S2"])
+
+        XCTAssertEqual(segments, [
+            AlignedSegment(speakerKey: "S1", start: 0.0, end: 1.2, text: "Bir iki"),
+            AlignedSegment(speakerKey: "S2", start: 1.3, end: 1.5, text: "evet"),
+        ])
+    }
+
     func testSpeechDurationsSumTurnsPerSpeaker() {
         let turns = [
             SpeakerTurn(speakerKey: "S1", start: 0, end: 2),

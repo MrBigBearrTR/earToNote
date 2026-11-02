@@ -45,6 +45,22 @@ final class SpeakerMatcherTests: XCTestCase {
         XCTAssertNil(matches["S1"]?.profileID)
     }
 
+    func testPersonListedTwiceIsStillGivenToOnlyOneSpeaker() {
+        let known = [
+            KnownSpeaker(id: ali, embedding: [1, 0]),
+            KnownSpeaker(id: ali, embedding: [0, 1]),
+        ]
+        let candidates = [
+            SpeakerCandidate(key: "S1", embedding: [0.95, 0.1], speechDuration: 20),
+            SpeakerCandidate(key: "S2", embedding: [0.1, 0.9], speechDuration: 20),
+        ]
+
+        let matches = SpeakerMatcher(threshold: 0.6).match(candidates: candidates, known: known)
+
+        XCTAssertEqual(matches["S1"]?.profileID, ali)
+        XCTAssertNil(matches["S2"]?.profileID)
+    }
+
     func testEqualSimilarityPrefersCandidateWithMoreSpeech() {
         let known = [KnownSpeaker(id: ali, embedding: [1, 0])]
         let candidates = [

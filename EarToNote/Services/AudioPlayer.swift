@@ -10,20 +10,21 @@ final class AudioPlayer {
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
 
+    @ObservationIgnored private var url: URL?
     @ObservationIgnored private var player: AVAudioPlayer?
     @ObservationIgnored private var ticker: Task<Void, Never>?
 
+    /// Loading the same file again keeps the position, so the view can call this every time it appears.
     func load(url: URL) {
+        if self.url == url, player != nil { return }
         stop()
-        guard FileManager.default.fileExists(atPath: url.path),
-              let player = try? AVAudioPlayer(contentsOf: url)
-        else {
+        self.url = url
+        guard let player = makePlayer(for: url) else {
             isAvailable = false
             duration = 0
             currentTime = 0
             return
         }
-        player.prepareToPlay()
         self.player = player
         duration = player.duration
         currentTime = 0
@@ -39,7 +40,7 @@ final class AudioPlayer {
     }
 
     func play(from time: TimeInterval? = nil) {
-        guard let player else { return }
+        guard let player = readyPlayer() else { return }
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .spokenAudio)
         try? session.setActive(true)
@@ -61,7 +62,7 @@ final class AudioPlayer {
     }
 
     func seek(to time: TimeInterval) {
-        guard let player else { return }
+        guard let player = readyPlayer() else { return }
         player.currentTime = clamped(time)
         currentTime = player.currentTime
     }
@@ -70,12 +71,34 @@ final class AudioPlayer {
         seek(to: currentTime + delta)
     }
 
+    /// Releases the file. A later `play` or `seek` opens it again at the last position.
     func stop() {
         player?.stop()
         player = nil
         isPlaying = false
         ticker?.cancel()
         ticker = nil
+    }
+
+    private func makePlayer(for url: URL) -> AVAudioPlayer? {
+        guard FileManager.default.fileExists(atPath: url.path),
+              let player = try? AVAudioPlayer(contentsOf: url)
+        else { return nil }
+        player.prepareToPlay()
+        return player
+    }
+
+    private func readyPlayer() -> AVAudioPlayer? {
+        if let player { return player }
+        guard let url, let player = makePlayer(for: url) else {
+            isAvailable = false
+            return nil
+        }
+        player.currentTime = min(currentTime, max(0, player.duration - 0.05))
+        self.player = player
+        duration = player.duration
+        isAvailable = true
+        return player
     }
 
     private func clamped(_ time: TimeInterval) -> TimeInterval {
@@ -86,7 +109,8 @@ final class AudioPlayer {
         ticker?.cancel()
         ticker = Task { [weak self] in
             while !Task.isCancelled {
-                self?.tick()
+                guard let self else { return }
+                self.tick()
                 try? await Task.sleep(for: .milliseconds(200))
             }
         }
